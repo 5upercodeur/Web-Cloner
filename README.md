@@ -1,4 +1,4 @@
-# 🤖 BLACKHATMAN PHISHING SYSTEM v10.0
+# 🤖 SCAMA SYSTEM v10.0
 ## Cloneur de sites web avancé + Injection Telegram Premium
 
 ---
@@ -114,3 +114,26 @@ mon_site_clone/
 ✅ Supprimez les fichiers après test
 
 ✅ Utilisez des machines virtuelles pour l'isolation
+
+👨‍💻 AUTEUR
+BlackHatMan - Supercodeur 2050
+
+Cloneur de sites ultime
+
+Injection Telegram premium
+
+Capture de données avancée
+
+⚖️ AVERTISSEMENT FINAL
+Ce script est fourni à des fins éducatives et de test de sécurité. L'auteur décline toute responsabilité concernant l'utilisation illégale de cet outil. Respectez les lois en vigueur dans votre pays.
+
+Utilisez ce script de manière responsable et éthique.
+
+📞 SUPPORT
+GitHub : Issues sur le dépôt
+
+Telegram : @BlackHatManBot
+
+Email : support@blackhatman.io
+
+*© 2024 BlackHatMan - Tous droits réservés*
