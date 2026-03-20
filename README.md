@@ -134,4 +134,4 @@ GitHub : Issues sur le dépôt
 
 Telegram : @joskozvvz
 
-*© 2025 JOSK0 - Tous droits réservés*
+*© 2026 JOSK0 - Tous droits réservés*
