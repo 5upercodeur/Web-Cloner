@@ -1,4 +1,4 @@
-# 🤖 SCAMA SYSTEM v10.0
+# 🤖 ANTISCAMA SYSTEM v10.0
 ## Cloneur de sites web avancé + Injection Telegram Premium
 
 ---
