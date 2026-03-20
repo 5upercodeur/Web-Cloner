@@ -132,8 +132,6 @@ Utilisez ce script de manière responsable et éthique.
 📞 SUPPORT
 GitHub : Issues sur le dépôt
 
-Telegram : @BlackHatManBot
+Telegram : @joskozvvz
 
-Email : support@blackhatman.io
-
-*© 2024 BlackHatMan - Tous droits réservés*
+*© 2025 JOSK0 - Tous droits réservés*
